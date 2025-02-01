@@ -4,7 +4,9 @@
 #include "game.hpp"
 
 u8* g_framebuf;
-u32 g_framebufWidth;
+Framebuffer g_framebuffer;
+u32 g_framebufWidth, g_framebufHeight;
+PadState g_pad;
 
 bool fileExists(std::string path)
 {
@@ -12,11 +14,28 @@ bool fileExists(std::string path)
     return (stat (path.c_str(), &buffer) == 0);
 }
 
+void Initgfx()
+{
+    NWindow* win = nwindowGetDefault();
+
+    g_framebufHeight = 720;
+    g_framebufWidth = 1280;
+    framebufferCreate(&g_framebuffer, win, g_framebufWidth, g_framebufHeight, PIXEL_FORMAT_RGBA_8888, 2);
+    framebufferMakeLinear(&g_framebuffer);
+}
+
+void InitController()
+{
+    padConfigureInput(1, HidNpadStyleSet_NpadStandard);
+    padInitializeDefault(&g_pad);
+}
+
 int main()
 {
     mkdir("sdmc:/switch", 777);
     mkdir("sdmc:/switch/2048", 777);
-    gfxInitDefault();
+    Initgfx();
+    InitController();
 
     Game::init();
     if (fileExists("sdmc:/switch/2048/state"))
@@ -24,13 +43,20 @@ int main()
         Game::loadState();
     }
 
-    while(appletMainLoop() && !(hidKeysDown(CONTROLLER_P1_AUTO) & KEY_PLUS))
+    while(appletMainLoop())
     {
+        padUpdate(&g_pad);
+        u64 kDown = padGetButtonsDown(&g_pad);
+        if (kDown & HidNpadButton_Plus)
+        {
+            break;
+        }
+
         Game::scanInput();
         Game::show();
     }
 
     Game::saveState();
-    gfxExit();
-	return 0;
+    framebufferClose(&g_framebuffer);
+    return 0;
 }

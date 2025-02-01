@@ -1,5 +1,9 @@
 #include "game.hpp"
 
+extern u32 g_framebufWidth, g_framebufHeight;
+extern Framebuffer g_framebuffer;
+extern PadState g_pad;
+
 const u32 g_l = 96;
 const u32 g_spacing = 16;
 const u32 g_xstart = ceil((1280 - g_l*4 - g_spacing*3) / 2);
@@ -107,9 +111,8 @@ void Grid::flip(void)
 
 void Game::scanInput(void)
 {
-    hidScanInput();
-    u64 kDown = hidKeysDown(CONTROLLER_P1_AUTO);
-    if (kDown & KEY_B)
+    u64 kDown = padGetButtonsDown(&g_pad);
+    if (kDown & HidNpadButton_B)
     {
         // restore game
         init();
@@ -118,7 +121,7 @@ void Game::scanInput(void)
     {
         std::array<Cell, 16> gridclone = grid;
 
-        if (kDown & KEY_UP)
+        if (kDown & HidNpadButton_Up)
         {
             Grid::transpose();
             Grid::flip();
@@ -126,19 +129,19 @@ void Game::scanInput(void)
             Grid::flip();
             Grid::transpose();
         }
-        else if (kDown & KEY_DOWN)
+        else if (kDown & HidNpadButton_Down)
         {
             Grid::transpose();
             Grid::operate();
             Grid::transpose();
         }
-        else if (kDown & KEY_LEFT)
+        else if (kDown & HidNpadButton_Left)
         {
             Grid::flip();
             Grid::operate();
             Grid::flip();
         }
-        else if (kDown & KEY_RIGHT)
+        else if (kDown & HidNpadButton_Right)
         {
             Grid::operate();
         }
@@ -192,15 +195,19 @@ bool Game::gameWon(void)
 void Game::show(void)
 {
     // background
-    g_framebuf = gfxGetFramebuffer(&g_framebufWidth, NULL);
-    memset(g_framebuf, 250, gfxGetFramebufferSize());
+    u32 stride = 0;
+    g_framebuf = (u8*) framebufferBegin(&g_framebuffer, &stride);
+    for (u32 y = 0; y < g_framebufHeight; y ++)
+    {
+        memset(&g_framebuf[y * stride], 250, g_framebufWidth * sizeof(u32));
+    }
 
     // the matrix background
     rectangle(
-        g_xstart - g_spacing, 
-        g_ystart - g_spacing, 
-        g_l*4 + g_spacing*5, 
-        g_l*4 + g_spacing*5, 
+        g_xstart - g_spacing,
+        g_ystart - g_spacing,
+        g_l*4 + g_spacing*5,
+        g_l*4 + g_spacing*5,
         colorbg
     );
 
@@ -214,7 +221,7 @@ void Game::show(void)
 
     // title
     DrawText(font42, g_xstart - g_spacing, 40, MakeColor(119, 110, 101, 255), title);
-    
+
     // score background
     rectangle(
         g_xstart + g_l*4 + g_spacing*2 - maxscore_w,
@@ -225,7 +232,7 @@ void Game::show(void)
     );
     // score
     DrawText(font24, g_xstart + g_l*4 + g_spacing*2 - maxscore_w + (maxscore_w + g_spacing*2 - score_w) / 2, 52, MakeColor(205, 192, 180, 255), scorestr);
-     
+
     // show cells
     for (u8 i = 0; i < 4; i++)
     {
@@ -240,19 +247,20 @@ void Game::show(void)
         u32 lost_w;
         GetTextDimensions(font24, "Press B to restart.", &lost_w, NULL);
         DrawText(font24, ceil((1280 - lost_w)/2), 640, MakeColor(119, 110, 101, 255), "Press B to restart.");
-        while (appletMainLoop() &&!(hidKeysDown(CONTROLLER_P1_AUTO) & KEY_B))
+        framebufferEnd(&g_framebuffer);
+        while (appletMainLoop())
         {
-            hidScanInput();
-            gfxFlushBuffers();
-            gfxSwapBuffers();
-            gfxWaitForVsync();
+            padUpdate(&g_pad);
+            u64 kDown = padGetButtonsDown(&g_pad);
+            if (kDown & HidNpadButton_B)
+            {
+                break;
+            }
         }
+        g_framebuf = (u8*) framebufferBegin(&g_framebuffer, &stride);
         Game::init();
     }
-
-    gfxFlushBuffers();
-    gfxSwapBuffers();
-    gfxWaitForVsync();
+    framebufferEnd(&g_framebuffer);
 }
 
 void Game::saveState(void)
